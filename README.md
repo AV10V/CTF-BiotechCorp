@@ -23,11 +23,14 @@ attacker@AV10V-mac  →  Kali VM  →  OpenVPN  →  DB26 192.168.197.180
 | **DC20** `172.16.197.200` | gMSA AES256 → WinRM → two ACL hops → ADCS ESC3 | Enrollment-agent template enrollable by one Certificate Manager → on-behalf-of `a.r.andrews` → Domain Admin |
 | **MGMT22** `172.16.197.202` | `svc-mgmt` (Remote Management Users) | Flag read with the Domain Admin ticket |
 
+Flags: `DB26` was collected straight from `xp_cmdshell` (first objective); `DC20` and `MGMT22`
+after Domain Admin.
+
 ## Page contents
 
 - **Topology** — clickable boxes from the Mac through the pivot to each target
-- **Step-by-step** — nine steps, arrow-key navigable, with the real commands and copy buttons
-- **Loot** — click-to-reveal credential table and both flags
+- **Step-by-step** — ten steps, arrow-key navigable, with the real commands and copy buttons
+- **Loot** — click-to-reveal credential table and all three flags
 
 Single self-contained `index.html` — no external JS, CSS or fonts.
 
