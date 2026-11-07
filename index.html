@@ -586,12 +586,10 @@
   document.addEventListener("click", function(e){
     var s = e.target.closest(".spoiler");
     if (!s) return;
-    if (!s.classList.contains("rev")){
-      s.textContent = s.getAttribute("data-v");
-      s.classList.add("rev");
-    } else {
-      s.textContent = s.getAttribute("data-v").slice(0, 10) + "\u2026";
-    }
+    if (!s.dataset.orig) s.dataset.orig = s.textContent;
+    var show = !s.classList.contains("rev");
+    s.classList.toggle("rev", show);
+    s.textContent = show ? s.getAttribute("data-v") : s.dataset.orig;
   });
 
   var m = /#step-(\d+)/.exec(location.hash);
