@@ -31,8 +31,11 @@ after Domain Admin.
 - **Topology** — clickable boxes from the Mac through the pivot to each target
 - **Step-by-step** — ten steps, arrow-key navigable, with the real commands and copy buttons
 - **Loot** — click-to-reveal credential table and all three flags
+- **Prompt** — the from-scratch briefing I would hand a fresh agent for this lab, plus a collapsed
+  generic AD template; full versions in [`AV10V/Prompts`](https://github.com/AV10V/Prompts)
 
-Single self-contained `index.html` — no external JS, CSS or fonts.
+Single self-contained `index.html` — no external JS, CSS or fonts. The prompt text on the page is
+real and complete; only the outbound links to other repositories leave the page.
 
 ## Note on secrets
 
