@@ -255,7 +255,7 @@
 <div class="wrap section" id="creds">
   <div class="s-head">
     <h2><span class="num">02</span> What each box gave up</h2>
-    <p>Click a value to reveal it. These are credentials from one completed lab instance — treat the whole box as compromised if you ever reuse them.</p>
+    <p>Click a value to reveal it. This was one throwaway instance of the lab and that run is over — the range has almost certainly been torn down since. If you build the same lab yourself you will get <b>different addresses, and possibly different accounts and passwords</b>: read the flow, not the keys. Because the instance is retired, publishing its credentials here costs nothing and makes the chain checkable end to end.</p>
   </div>
   <table class="tbl">
     <thead><tr><th>Item</th><th>Where it came from</th><th>Value</th></tr></thead>
@@ -312,7 +312,7 @@
 <div class="wrap section" id="prompt">
   <div class="s-head">
     <h2><span class="num">03</span> The prompts</h2>
-    <p>Operator briefings I would hand a fresh agent: one per scenario, each ready to paste as the first message. None of them contain hashes, flags or the solved chain — only what you legitimately hold at t=0 (or placeholders to fill), plus the discipline that kills the loops which made the original run slow. Each window scrolls; <b>copy</b> gives you exactly the text the <b>link</b> opens.</p>
+    <p>Operator briefings I would hand a fresh agent: one per scenario, each ready to paste as the first message. None of them contain hashes, flags or the solved chain — only what you legitimately hold at t=0 (or placeholders to fill), plus the operating discipline that keeps a run on the rails. Each window scrolls; <b>copy</b> gives you exactly the text the <b>link</b> opens.</p>
   </div>
 
   <div class="disc">
@@ -1265,14 +1265,17 @@ evidence decide. Start with connectivity verification and initial enumeration.
     which is why chisel appears exactly once, between DB26 and DC20.
   </div>
   <div class="note">
-    <b>Two things cost me the most time</b> and both were my own tooling, not the target:
-    a wrong AES string-to-key convention (wrongly assumed UTF-16LE, retried several times before
-    calibrating against a known password/hash pair), and a gMSA password blob that decodes to garbage
-    in this lab by design. Neither had anything to do with the boxes.
+    <b>Two gotchas specific to this range.</b> The gMSA's <code>msDS-ManagedPassword</code> blob decodes
+    to garbage by design, so that credential has to be reconstructed from what the blob does yield
+    rather than read straight out of LDAP. And the certificate template is reachable through enrollment
+    rights alone — <code>certipy-ad find -vulnerable</code> reports nothing, so the full template dump
+    is what exposes it.
   </div>
   <div class="note">
     <b>Scope:</b> this is an intentionally vulnerable training lab, assessed under its rules of engagement.
-    Passwords, hashes and flags above belong to one instance — rotate everything if you reuse the range.
+    The run is complete and the instance retired, so the credentials and flags above are dead — published
+    to make the chain verifiable, not as reusable access. A fresh deployment will hand you different
+    addresses and its own accounts.
   </div>
 </div>
 

@@ -40,5 +40,7 @@ real and complete; only the outbound links to other repositories leave the page.
 
 ## Note on secrets
 
-Credentials, hashes and flags belong to one completed lab instance. The range is intentionally
-vulnerable; rotate everything if you reuse it.
+Credentials, hashes and flags are from one throwaway instance of the lab, and that run is over — the
+range has almost certainly been torn down since. A fresh deployment will hand you different addresses
+and its own accounts, so treat this as the flow rather than a set of keys. Because the instance is
+retired, publishing its credentials costs nothing and makes the chain checkable.
