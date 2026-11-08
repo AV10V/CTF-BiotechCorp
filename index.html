@@ -133,7 +133,16 @@
   .phead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.015)}
   .phead h3{font-size:14px}
   .pk{font-family:var(--mono);font-size:9.5px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
-  .pcard pre{border:0;border-radius:0;max-height:580px;overflow:auto;font-size:11.5px;line-height:1.6}
+  .pcard pre{border:0;border-radius:0;max-height:370px;overflow:auto;font-size:11.5px;line-height:1.6}
+  .pcard.hid pre{display:none}
+  .pacts{display:flex;gap:6px;align-items:center;flex-shrink:0}
+  a.cp{display:inline-block;line-height:1.5}
+  .disc{border:1px solid rgba(239,111,122,.38);background:rgba(239,111,122,.07);border-radius:10px;padding:15px 17px;margin-bottom:16px}
+  .disc h3{font-size:14px;color:var(--bad);margin:0 0 8px}
+  .disc ul{margin:0;padding-left:19px;font-size:13.5px;color:#f0c9cd;line-height:1.65}
+  .disc li{margin-bottom:5px}
+  .disc li:last-child{margin-bottom:0}
+  .disc b{color:#ffd9dc}
   .pcard pre::-webkit-scrollbar{width:9px;height:9px}
   .pcard pre::-webkit-scrollbar-thumb{background:#22303f;border-radius:5px}
   details.pcard>summary{cursor:pointer;list-style:none;padding:12px 14px;font-family:var(--mono);font-size:11.5px;color:var(--acc2);border-bottom:1px solid transparent}
@@ -302,17 +311,31 @@
 
 <div class="wrap section" id="prompt">
   <div class="s-head">
-    <h2><span class="num">03</span> The prompt</h2>
-    <p>The briefing I would hand a fresh agent to solve this lab in one pass. It contains no hashes, no discovered accounts and no chain — only what you legitimately hold at t=0, plus the discipline that kills the loops which made the first run slow.</p>
+    <h2><span class="num">03</span> The prompts</h2>
+    <p>Operator briefings I would hand a fresh agent: one per scenario, each ready to paste as the first message. They contain no hashes, no discovered accounts and no chain — only what you legitimately hold at t=0, plus the discipline that kills the loops which made the original run slow.</p>
+  </div>
+
+  <div class="disc">
+    <h3>&#9888; Read this before you copy anything</h3>
+    <ul>
+      <li><b>Do not run these prompts on average / consumer models.</b> In the best case they simply will not be executed as written — the model ignores the rules, stalls, or starts inventing output. In the worst case your <b>account gets blocked</b> for generating offensive tooling and step-by-step intrusion commands.</li>
+      <li><b>Do not point them at anything you do not own or have written permission to test.</b> Running this against a third-party system can have <b>legal consequences</b> for you personally, regardless of intent.</li>
+      <li><b>Allowed use:</b> CTF / training labs, and penetration tests covered by a signed scope from the system owner that names the targets and the rules of engagement.</li>
+      <li><b>Use at your own risk.</b> No liability for misuse, for damage caused by an agent acting on these instructions, or for accounts suspended as a result.</li>
+    </ul>
   </div>
 
   <div class="pwrap">
-    <div class="pcard">
+    <div class="pcard" id="card-fromzero">
       <div class="phead">
-        <h3>From zero — this lab</h3>
-        <div style="display:flex;gap:9px;align-items:center">
-          <span class="pk">paste as first message</span>
+        <div>
+          <h3>01 · From zero — this lab</h3>
+          <span class="pk">paste as first message · 3 hosts · no prior loot</span>
+        </div>
+        <div class="pacts">
           <button class="cp" data-copy="p-fromzero">copy</button>
+          <a class="cp" href="https://github.com/AV10V/Prompts/blob/main/prompts/02-biotechcorp-from-zero.md" target="_blank" rel="noopener">link</a>
+          <button class="cp" data-hide="card-fromzero">hide</button>
         </div>
       </div>
 <pre id="p-fromzero">ROLE
@@ -388,8 +411,18 @@ OUTPUT
   | what remains unverified.</pre>
     </div>
 
-    <details class="pcard">
-      <summary>Generic template for any AD lab — the skeleton, full version in the repo</summary>
+    <div class="pcard" id="card-generic">
+      <div class="phead">
+        <div>
+          <h3>02 · Generic template — any AD lab</h3>
+          <span class="pk">skeleton · 10 rules · 8 phases · report contract</span>
+        </div>
+        <div class="pacts">
+          <button class="cp" data-copy="p-generic">copy</button>
+          <a class="cp" href="https://github.com/AV10V/Prompts/blob/main/prompts/01-autonomous-ad-ctf-agent.md" target="_blank" rel="noopener">link</a>
+          <button class="cp" data-hide="card-generic">hide</button>
+        </div>
+      </div>
 <pre id="p-generic">ROLE
   Autonomous pentest agent inside an authorized lab. Enumerate first, exploit on
   evidence, verify everything with real output, never invent results.
@@ -427,7 +460,79 @@ PHASES
 REPORT
   summary | infrastructure | attack chain with commands | credentials | flags |
   findings | failures and limitations | environment changes</pre>
-    </details>
+    </div>
+
+    <div class="pcard" id="card-condensed">
+      <div class="phead">
+        <div>
+          <h3>03 · Condensed example — filled in for a different lab</h3>
+          <span class="pk">copy, swap the values, paste · 120-minute cap</span>
+        </div>
+        <div class="pacts">
+          <button class="cp" data-copy="p-condensed">copy</button>
+          <a class="cp" href="https://github.com/AV10V/Prompts/blob/main/prompts/03-condensed-example.md" target="_blank" rel="noopener">link</a>
+          <button class="cp" data-hide="card-condensed">hide</button>
+        </div>
+      </div>
+<pre id="p-condensed">ROLE
+You are an autonomous penetration testing agent operating inside an authorized lab.
+Operate as an OSCP-level tester: enumerate first, exploit only on evidence, verify
+everything with real command output, never invent results.
+
+TARGET INFORMATION
+- Targets: 10.129.14.32 (role unknown - confirm by enumeration).
+  Authorized range: 10.129.14.0/24 only.
+- Domain: unknown (must be confirmed by enumeration).
+- Initial credentials: none.
+- VPN: lab tunnel via tun0, attacker 10.10.14.55. No internet from the attacker host.
+- Platform: Kali Linux. Records dir: /root/engagement. Max runtime: 120 minutes.
+- Rate ceiling: nmap -T4, max-rate 1000, no -T5, no domain-wide spraying.
+- Forbidden: password spraying, account lockouts, service restarts, deleting files,
+  anything against 10.129.14.1 (gateway) or outside 10.129.14.0/24.
+
+OBJECTIVE
+Obtain Domain Administrator and retrieve the flag from
+C:\Users\Administrator\Desktop\root.txt. Flag format: [A-Za-z0-9]{32}.
+Success = flag captured plus a verified DA-level command output.
+
+RULES
+ 1 Evidence first: every claim comes from output you produced; label Confirmed /
+   Likely / Hypothesis / Failed. A scanner hit is a lead, not a success.
+ 2 Enumerate, then decide. Only touch SMB/HTTP/LDAP/Kerberos/RDP/WinRM/MSSQL if
+   they are actually open. No assumed attack chain.
+ 3 Records in /root/engagement (scope, hosts, services, identities,
+   credentials.secure.md chmod 600, attack_paths, successful_steps,
+   failed_attempts, environment_changes) and raw output in evidence/NN-tool.txt
+   via tee. Read records before re-enumerating. Secrets stay in the secure file.
+ 4 Failure handling: exact error, classify the cause, retry once for a clear
+   execution error, max two attempts per hypothesis, then move on.
+ 5 Credentials: source and type, lockout policy before any guessed login, one
+   minimal attempt each, never assume reuse.
+ 6 Output hygiene: timeout 300 on network commands, tee raw output, grep the key
+   lines, staged scanning (top 1000 -> all TCP -> UDP 50).
+ 7 Pivots only into authorized ranges. Verify connectivity before enumerating.
+ 8 Least disruption: no resets, no service changes, no deletions; log every change.
+ 9 Scope guard: stop and ask before leaving the authorized range or doing
+   anything destructive or irreversible.
+10 Stop when the objective is verified, the 120-minute cap is hit, or three
+   re-plans produce no new evidence. Deliver a partial report with the blocker.
+
+METHOD
+ 0 ip -br addr; ip route; ping; command -v nmap nxc certipy evil-winrm; staged nmap
+ 1 per open service: anonymous access, versions, shares, HTTP paths, LDAP bind,
+   RID cycling, SMB signing. Rank initial-access candidates.
+ 2 foothold from a ranked candidate, then verify identity and privileges at once
+ 3 local enumeration; test escalation only where evidence supports it
+ 4 interfaces and routes; confirm any new subnet is in range; tunnel if needed
+ 5 AD enumeration plus BloodHound; connect owned principals to privileged objects
+ 6 if AD CS exists, certipy find, then verify effective template rights
+ 7 execute the best-supported path; verify each hop before the next
+ 8 retrieve the flag exactly, prove DA-level access, then stop
+
+FINAL REPORT
+ summary | infrastructure | attack chain with commands | credentials | flags |
+ findings | failures and limitations | environment changes</pre>
+    </div>
   </div>
 
   <div class="note ok" style="margin-top:16px">
@@ -762,6 +867,15 @@ REPORT
     if (navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(txt).then(done, function(){ fb(txt); done(); });
     } else { fb(txt); done(); }
+  });
+
+  document.addEventListener("click", function(e){
+    var b = e.target.closest("[data-hide]");
+    if (!b) return;
+    var card = document.getElementById(b.getAttribute("data-hide"));
+    if (!card) return;
+    var hidden = card.classList.toggle("hid");
+    b.textContent = hidden ? "show" : "hide";
   });
 
   var m = /#step-(\d+)/.exec(location.hash);
