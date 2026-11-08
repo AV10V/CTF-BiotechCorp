@@ -126,6 +126,22 @@
 
   .note{border:1px solid rgba(240,180,41,.28);background:rgba(240,180,41,.06);border-radius:10px;padding:13px 15px;font-size:13.5px;color:#e6d6ac;margin-top:16px}
   .note b{color:var(--warn)}
+
+  /* ---------- prompt section ---------- */
+  .pwrap{display:grid;gap:14px}
+  .pcard{border:1px solid var(--line);border-radius:10px;background:var(--card2);overflow:hidden}
+  .phead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.015)}
+  .phead h3{font-size:14px}
+  .pk{font-family:var(--mono);font-size:9.5px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+  .pcard pre{border:0;border-radius:0;max-height:580px;overflow:auto;font-size:11.5px;line-height:1.6}
+  .pcard pre::-webkit-scrollbar{width:9px;height:9px}
+  .pcard pre::-webkit-scrollbar-thumb{background:#22303f;border-radius:5px}
+  details.pcard>summary{cursor:pointer;list-style:none;padding:12px 14px;font-family:var(--mono);font-size:11.5px;color:var(--acc2);border-bottom:1px solid transparent}
+  details.pcard>summary::-webkit-details-marker{display:none}
+  details.pcard>summary:hover{color:var(--acc)}
+  details.pcard[open]>summary{border-bottom-color:var(--line)}
+  details.pcard>summary::before{content:"\25B8  ";color:var(--acc)}
+  details.pcard[open]>summary::before{content:"\25BE  "}
   .ok{border-color:rgba(61,220,151,.28);background:rgba(61,220,151,.06);color:#bfe6d3}
   .ok b{color:var(--acc)}
 
@@ -145,6 +161,7 @@
       <a href="#path">Attack path</a>
       <a href="#walk">Walkthrough</a>
       <a href="#creds">Loot</a>
+      <a href="#prompt">Prompt</a>
       <a href="#notes">Notes</a>
     </nav>
   </div>
@@ -283,9 +300,147 @@
   </div>
 </div>
 
+<div class="wrap section" id="prompt">
+  <div class="s-head">
+    <h2><span class="num">03</span> The prompt</h2>
+    <p>The briefing I would hand a fresh agent to solve this lab in one pass. It contains no hashes, no discovered accounts and no chain — only what you legitimately hold at t=0, plus the discipline that kills the loops which made the first run slow.</p>
+  </div>
+
+  <div class="pwrap">
+    <div class="pcard">
+      <div class="phead">
+        <h3>From zero — this lab</h3>
+        <div style="display:flex;gap:9px;align-items:center">
+          <span class="pk">paste as first message</span>
+          <button class="cp" data-copy="p-fromzero">copy</button>
+        </div>
+      </div>
+<pre id="p-fromzero">ROLE
+You are solving an authorized Active Directory CTF. Work autonomously; nobody is
+available to answer questions. Every conclusion you report must be backed by a
+command you actually ran and its output.
+
+STARTING POSITION — this is ALL you know
+  initial account : e.ross : SilverCometGlass@71   domain: biotechcorp.offsec
+  hosts, in the only order they are reachable:
+    192.168.197.180   first network, direct over the VPN
+    172.16.197.200    second network, only through host 1
+    172.16.197.202    second network, only through host 1
+
+  You do NOT know: any other credential, any hash, whether ADCS is installed,
+  who the domain admin is, or where the flags are. Discover all of it.
+
+OBJECTIVE
+  Admin access on all three hosts. proof.txt from each. The three flag values
+  verbatim, each with the command that produced it. The full path, one command
+  per hop, plus every credential recovered.
+
+SCOPE
+  Only those three IPs. No subnet sweeps, no host discovery outside them, no
+  scanning the VPN gateway or neighbouring ranges.
+
+OPERATING RULES
+  R1  Calibrate Kerberos key derivation once, on e.ross, then reuse it forever.
+      impacket _AES256CTS.string_to_key across a few encodings and salts; the key
+      that returns a TGT is the convention. PREAUTH_FAILED means your derivation
+      is wrong, not the credential. Never guess an encoding twice.
+  R2  Permission sweep before authentication: bloodyad get writable, plus the
+      full certipy find (every template, not just -vulnerable). A template can be
+      exploitable through enrollment rights while -vulnerable reports nothing.
+  R3  Two-strike rule. One technique failing twice means change technique, not
+      parameters. Binary blobs get two decode attempts, then move on.
+  R4  Shell hygiene. Never send inline PowerShell with quotes through evil-winrm.
+      Ship a .ps1 to C:/Users/&lt;you&gt;/Documents/, run it with -f, download the result.
+      C:/Users/Public is usually ACL-denied.
+  R5  Invocation defaults. certipy: -dc-ip -dc-host -target -k -no-pass -ns, and
+      LDAPS for any password write. impacket: -dc-ip with KRB5CCNAME exported and
+      a krb5.conf that disables canonicalisation and rdns. Retry certipy RPC
+      calls up to three times — the first attempt routinely times out.
+  R6  Credential discipline. Record source and type, one auth attempt per
+      credential, reuse ccaches.
+  R7  Least disruption. Read flags, do not destroy, note anything you changed.
+  R8  Evidence over narrative. Command, output line, and why it worked.
+
+PHASES (the time boxes are kill criteria)
+  P0   5 min   tunnel up, nmap the first host, record services
+  P1  20 min   foothold with e.ross: SMB, then MSSQL Windows auth. Check sysadmin
+               and impersonation, then xp_cmdshell. Command execution is the goal,
+               the route varies.
+  P2  25 min   harvest credentials: every readable share for keytab, mof, config and
+               backup files; a UTF-16LE password search; LSASS if you get local admin
+  P3  10 min   pivot into 172.16.197.0/24 through host 1, verify both targets
+  P4  25 min   AD pathfinding, this is where the run is won: templates and their
+               enrollment rights, writable objects, UAC flags, group membership,
+               ACL chains. Rank the candidate paths, take the shortest.
+  P5  35 min   escalate. Verify every hop with a TGT before starting the next.
+               For ESC3: agent certificate, then on-behalf-of a client-auth
+               template, then certipy auth. Target a LIVE Domain Admin — a
+               disabled account answers KDC_ERR_CLIENT_REVOKED.
+  P6  10 min   flags on both second-network hosts, then secretsdump for krbtgt
+
+DO NOT
+  sweep other subnets · spray passwords · retry a failed key derivation · keep
+  decoding a blob after two attempts · PKINIT a disabled account · claim a step
+  without its output.
+
+OUTPUT
+  Flag table | chain table (step, command, why it worked) | credential inventory
+  | what remains unverified.</pre>
+    </div>
+
+    <details class="pcard">
+      <summary>Generic template for any AD lab — the skeleton, full version in the repo</summary>
+<pre id="p-generic">ROLE
+  Autonomous pentest agent inside an authorized lab. Enumerate first, exploit on
+  evidence, verify everything with real output, never invent results.
+
+INPUTS (fill before use)
+  targets / authorized CIDR / domain or unknown / initial creds or none /
+  attacker platform and interface / internet yes-no / objective and flag format /
+  max runtime / forbidden actions / rate ceiling
+
+RULES
+   1 Evidence first. Label Confirmed / Likely / Hypothesis / Failed. A scanner hit
+     is a lead, not a success.
+   2 Enumerate, then decide. No assumed chain. Assume nothing about AD or ADCS.
+   3 State files: scope, hosts, services, identities, credentials.secure,
+     attack_paths, successful_steps, failed_attempts, environment_changes, and
+     evidence/NN-tool-target.txt. Read them before re-enumerating.
+   4 Two-strike rule, then change technique. Record the exact error.
+   5 Credentials: source and type, lockout policy first, one attempt each.
+   6 Output hygiene: timeout on network commands, tee raw output to evidence,
+     grep the key lines, staged port scanning.
+   7 Pivots only into authorized ranges. Verify connectivity before enumerating.
+   8 Least disruption. Log every change with its restoration status.
+   9 Scope guard: hard stop and ask before leaving scope or doing anything
+     destructive or irreversible.
+  10 Stop conditions: objective verified, runtime cap hit, or three re-plans with
+     no new evidence. Then deliver a partial report with the exact blocker.
+
+PHASES
+   0 connectivity and staged scan | 1 service enumeration and ranking
+   2 initial access, verified immediately | 3 local enum and privesc candidates
+   4 network and pivot map | 5 AD enumeration (conditional)
+   6 ADCS (conditional) | 7 execute the best-supported path, verify each hop
+   8 objective plus evidence
+
+REPORT
+  summary | infrastructure | attack chain with commands | credentials | flags |
+  findings | failures and limitations | environment changes</pre>
+    </details>
+  </div>
+
+  <div class="note ok" style="margin-top:16px">
+    <b>Reusable copies:</b>
+    <a href="https://github.com/AV10V/Prompts">github.com/AV10V/Prompts</a> — the full generic template
+    (sections 1–12, evidence structure, pitfalls, scope guard, report format) and the from-scratch prompt
+    for this lab, kept as markdown for reuse in other labs.
+  </div>
+</div>
+
 <div class="wrap section" id="notes">
   <div class="s-head">
-    <h2><span class="num">03</span> Notes</h2>
+    <h2><span class="num">04</span> Notes</h2>
   </div>
   <div class="note ok">
     <b>What actually made this readable:</b> the first host was reachable directly over the VPN, so
@@ -590,6 +745,23 @@
     var show = !s.classList.contains("rev");
     s.classList.toggle("rev", show);
     s.textContent = show ? s.getAttribute("data-v") : s.dataset.orig;
+  });
+
+  document.addEventListener("click", function(e){
+    var b = e.target.closest("[data-copy]");
+    if (!b) return;
+    var src = document.getElementById(b.getAttribute("data-copy"));
+    if (!src) return;
+    var txt = src.textContent;
+    var done = function(){ b.textContent = "copied"; setTimeout(function(){ b.textContent = "copy"; }, 1300); };
+    var fb = function(t){
+      var ta = document.createElement("textarea");
+      ta.value = t; document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(done, function(){ fb(txt); done(); });
+    } else { fb(txt); done(); }
   });
 
   var m = /#step-(\d+)/.exec(location.hash);
